@@ -1,124 +1,145 @@
-import axios from "axios";
+import { Request, Response } from "express";
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
+import { promisify } from "util";
 
-import {
-  Request,
-  Response,
-} from "express";
+const execAsync = promisify(exec);
 
+export const executeCode = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { code, language } = req.body;
 
-
-export const executeCode =
-  async (
-    req: Request,
-    res: Response
-  ) => {
-
-    try {
-
-      const {
-        code,
-        language,
-      } = req.body;
-
-
-
-
-
-      // JDoodle language mapping
-      let jdoodleLanguage =
-        "nodejs";
-
-      let versionIndex = "4";
-
-
-
-      if (
-        language === "python"
-      ) {
-
-        jdoodleLanguage =
-          "python3";
-
-        versionIndex = "4";
-      }
-
-
-
-      else if (
-        language === "cpp"
-      ) {
-
-        jdoodleLanguage =
-          "cpp17";
-
-        versionIndex = "1";
-      }
-
-
-
-      else if (
-        language === "java"
-      ) {
-
-        jdoodleLanguage =
-          "java";
-
-        versionIndex = "4";
-      }
-
-
-
-
-
-
-      const response =
-        await axios.post(
-
-          "https://api.jdoodle.com/v1/execute",
-
-          {
-            clientId:
-              process.env.JDOODLE_CLIENT_ID,
-
-            clientSecret:
-              process.env.JDOODLE_CLIENT_SECRET,
-
-            script: code,
-
-            language:
-              jdoodleLanguage,
-
-            versionIndex,
-          }
-        );
-
-
-
-
-
-      return res.status(200).json({
-
-        output:
-          response.data.output,
-      });
-
-    } catch (error: any) {
-
-      console.log(
-        "EXECUTION ERROR:"
-      );
-
-      console.log(
-        error.response?.data ||
-        error.message
-      );
-
-
-
-      return res.status(500).json({
-
-        message:
-          "Execution Failed",
+    if (!code || !language) {
+      return res.status(400).json({
+        message: "Code and language required",
       });
     }
-  };
+
+    const tempDir = path.join(
+      __dirname,
+      "../../temp"
+    );
+
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, {
+        recursive: true,
+      });
+    }
+
+    let filename = "";
+    let dockerCommand = "";
+
+    // =====================
+    // PYTHON
+    // =====================
+    if (language === "python") {
+      filename = "main.py";
+
+      const filePath = path.join(
+        tempDir,
+        filename
+      );
+
+      fs.writeFileSync(filePath, code);
+
+      dockerCommand =
+        `docker run --rm -v "${tempDir}:/app" -w /app python:3.12 python main.py`;
+    }
+
+    // =====================
+    // JAVASCRIPT
+    // =====================
+    else if (
+      language === "javascript" ||
+      language === "js"
+    ) {
+      filename = "main.js";
+
+      const filePath = path.join(
+        tempDir,
+        filename
+      );
+
+      fs.writeFileSync(filePath, code);
+
+      dockerCommand =
+        `docker run --rm -v "${tempDir}:/app" -w /app node:20 node main.js`;
+    }
+
+    // =====================
+    // JAVA
+    // =====================
+     else if (language === "java") {
+  filename = "Main.java";
+
+  const filePath = path.join(
+    tempDir,
+    filename
+  );
+
+  fs.writeFileSync(filePath, code);
+
+  dockerCommand =
+    `docker run --rm -v "${tempDir}:/app" -w /app eclipse-temurin:21 sh -c "javac Main.java && java Main"`;
+}
+    // =====================
+    // C++
+    // =====================
+    else if (
+      language === "cpp" ||
+      language === "c++"
+    ) {
+      filename = "main.cpp";
+
+      const filePath = path.join(
+        tempDir,
+        filename
+      );
+
+      fs.writeFileSync(filePath, code);
+
+      dockerCommand =
+        `docker run --rm -v "${tempDir}:/app" -w /app gcc:13 sh -c "g++ main.cpp -o main && ./main"`;
+    }
+
+    else {
+      return res.status(400).json({
+        message: "Unsupported language",
+      });
+    }
+
+    const result = await execAsync(
+      dockerCommand,
+      {
+        timeout: 10000,
+      }
+    );
+
+    const {
+      stdout,
+      stderr,
+    } = result;
+
+    return res.json({
+      output:
+        stderr ||
+        stdout ||
+        "No output",
+    });
+
+  } catch (error: any) {
+
+    console.log(error);
+
+    return res.status(500).json({
+      output:
+        error?.stderr ||
+        error?.message ||
+        "Execution failed",
+    });
+  }
+};

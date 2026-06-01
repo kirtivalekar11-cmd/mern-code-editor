@@ -4,6 +4,7 @@ import {
   createFile,
   getFiles,
   saveFile,
+  deleteFile,
 } from "../controllers/fileController";
 
 import { protect }
@@ -27,6 +28,12 @@ router.put(
   "/:id",
   protect,
   saveFile
+);
+
+router.delete(
+  "/:id",
+  protect,
+  deleteFile
 );
 
 export default router;

@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 
 import File from "../models/File";
 
@@ -91,6 +91,32 @@ export const saveFile = async (
 
     console.log(error);
 
+    res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+
+export const deleteFile = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const file = await File.findByIdAndDelete(
+      req.params.id
+    );
+
+    if (!file) {
+      return res.status(404).json({
+        message: "File not found",
+      });
+    }
+
+    res.json({
+      message: "File deleted",
+    });
+
+  } catch (error) {
     res.status(500).json({
       message: "Server Error",
     });

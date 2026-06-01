@@ -6,7 +6,9 @@ import MonacoEditor from "@monaco-editor/react";
 
 import api from "../api/axios";
 
-import { FaFile } from "react-icons/fa";
+import { FaFile, FaTrash } from "react-icons/fa";
+
+import axios from "axios";
 
 
 
@@ -17,13 +19,8 @@ interface FileType {
   content: string;
 }
 
-
-
 export default function EditorPage() {
-
   const { projectId } = useParams();
-
-
 
   const [files, setFiles] =
     useState<FileType[]>([]);
@@ -37,7 +34,8 @@ export default function EditorPage() {
   const [output, setOutput] =
     useState("");
 
-
+  
+const [isRunning, setIsRunning] = useState(false);
 
   // PASTE DETECTION
   const [pasteDetected,
@@ -47,12 +45,6 @@ export default function EditorPage() {
   const [pasteCount,
   setPasteCount] =
     useState(0);
-
-
-
-
-
-
 
 
 
@@ -82,14 +74,6 @@ export default function EditorPage() {
       console.log(error);
     }
   };
-
-
-
-
-
-
-
-
 
   // CREATE FILE
   const createFile = async () => {
@@ -160,13 +144,6 @@ export default function EditorPage() {
   };
 
 
-
-
-
-
-
-
-
   // SAVE FILE
   const saveFile = async (
     value: string | undefined
@@ -205,90 +182,74 @@ export default function EditorPage() {
     }
   };
 
+  const deleteFile = async (
+  fileId: string
+) => {
+  try {
+    await api.delete(
+      `/files/${fileId}`
+    );
 
-
-
-
-
-
-
-
-  // RUN CODE
-  const runCode = async () => {
-
-    if (!selectedFile) {
-
-      setOutput(
-        "No file selected"
+    const updatedFiles =
+      files.filter(
+        (file) =>
+          file._id !== fileId
       );
 
-      return;
-    }
-
-
+    setFiles(updatedFiles);
 
     if (
-      !selectedFile.content
+      selectedFile?._id === fileId
     ) {
-
-      setOutput(
-        "File is empty"
+      setSelectedFile(
+        updatedFiles[0] || null
       );
-
-      return;
     }
 
+  } catch (error) {
+    console.log(error);
+  }
+};
 
 
-    try {
+  const runCode = async () => {
+  if (!selectedFile) {
+    setOutput("No file selected");
+    return;
+  }
 
-      const response =
-        await api.post(
-          "/execute",
-          {
-            code:
-              selectedFile.content,
+  try {
+    setIsRunning(true);
+    setOutput("Running code...");
 
-            language:
-              selectedFile.language,
-          }
-        );
-
-
-
-      if (
-        response.data &&
-        response.data.output
-      ) {
-
-        setOutput(
-          response.data.output
-        );
-
-      } else {
-
-        setOutput(
-          JSON.stringify(
-            response.data,
-            null,
-            2
-          )
-        );
+    const response = await api.post(
+      "/execute",
+      {
+        code: selectedFile.content,
+        language: selectedFile.language,
       }
+    );
 
-    } catch (error: any) {
+    setOutput(
+      response.data.output || ""
+    );
 
-      setOutput(
-        error.response?.data
-          ?.message ||
-        "Execution Error"
-      );
-    }
-  };
-
-
-
-
+  } 
+  catch (error) {
+  if (axios.isAxiosError(error)) {
+    setOutput(
+      error.response?.data?.output ||
+      error.response?.data?.message ||
+      "Execution Error"
+    );
+  } else {
+    setOutput("Execution Error");
+  }
+}
+  finally {
+    setIsRunning(false);
+  }
+};
 
 
 
@@ -296,31 +257,17 @@ export default function EditorPage() {
 
   // LOAD FILES
   useEffect(() => {
-
     const loadFiles =
       async () => {
-
         await fetchFiles();
       };
-
     loadFiles();
-
   }, []);
-
-
-
-
-
-
-
 
 
   return (
 
     <div className="h-screen flex bg-[#1e1e1e] text-white">
-
-
-
 
       {/* SIDEBAR */}
       <div className="w-[300px] bg-[#252526] border-r border-zinc-700 p-4">
@@ -328,9 +275,6 @@ export default function EditorPage() {
         <h2 className="text-xl font-bold mb-4">
           Files
         </h2>
-
-
-
 
 
         {/* CREATE FILE */}
@@ -360,46 +304,54 @@ export default function EditorPage() {
         </div>
 
 
-
-
-
-
-
-
         {/* FILE LIST */}
         <div className="flex flex-col gap-2">
 
-          {files.map((file) => (
+      {files.map((file) => (
 
-            <div
-              key={file._id}
+  <div
+    key={file._id}
+    className={`p-3 rounded flex items-center justify-between transition
 
-              onClick={() =>
-                setSelectedFile(
-                  file
-                )
-              }
+    ${
+      selectedFile?._id === file._id
+        ? "bg-blue-600"
+        : "bg-zinc-800 hover:bg-zinc-700"
+    }`}
+  >
 
-              className={`p-3 rounded cursor-pointer flex items-center gap-2 transition
+    <div
+      onClick={() =>
+        setSelectedFile(file)
+      }
+      className="flex items-center gap-2 flex-1 cursor-pointer"
+    >
+      <FaFile />
 
-              ${
-                selectedFile?._id ===
-                file._id
+      <span>
+        {file.filename}
+      </span>
+    </div>
 
-                  ? "bg-blue-600"
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
 
-                  : "bg-zinc-800 hover:bg-zinc-700"
-              }`}
-            >
+        if (
+          window.confirm(
+            `Delete ${file.filename}?`
+          )
+        ) {
+          deleteFile(file._id);
+        }
+      }}
+      className="text-red-400 hover:text-red-600"
+    >
+      <FaTrash />
+    </button>
 
-              <FaFile />
-
-              <span>
-                {file.filename}
-              </span>
-
-            </div>
-          ))}
+  </div>
+))}
 
         </div>
 
@@ -407,16 +359,8 @@ export default function EditorPage() {
 
 
 
-
-
-
-
-
-
       {/* MAIN AREA */}
       <div className="flex-1 flex flex-col">
-
-
 
 
         {/* TOP BAR */}
@@ -433,8 +377,6 @@ export default function EditorPage() {
 
             </h2>
 
-
-
             <p className="text-sm text-zinc-400">
 
               {
@@ -445,24 +387,19 @@ export default function EditorPage() {
 
           </div>
 
-
-
-
-
           <button
             onClick={runCode}
-            className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded"
-          >
-            Run Code
-          </button>
+            disabled={isRunning}
+            className={`px-6 py-2 rounded ${
+            isRunning
+            ? "bg-zinc-600 cursor-not-allowed"
+            : "bg-green-600 hover:bg-green-700"
+          }`}
+        >
+         {isRunning ? "Running..." : "Run Code"}
+        </button>
 
         </div>
-
-
-
-
-
-
 
 
         {/* PASTE WARNING */}
@@ -479,14 +416,6 @@ export default function EditorPage() {
             </div>
           )
         }
-
-
-
-
-
-
-
-
 
         {/* EDITOR */}
         <div className="flex-1">
@@ -512,48 +441,53 @@ export default function EditorPage() {
 
 
               onMount={(editor) => {
+  const domNode = editor.getDomNode();
 
-                editor.onDidPaste(() => {
+  const showViolation = () => {
+    setPasteDetected(true);
 
-                  console.log(
-                    "PASTE DETECTED"
-                  );
+    setPasteCount((prev) => prev + 1);
 
+    setTimeout(() => {
+      setPasteDetected(false);
+    }, 300000);
+  };
 
+  // Ctrl + V / Cmd + V
+  editor.onKeyDown((e) => {
+    if (
+      (e.ctrlKey || e.metaKey) &&
+      e.code === "KeyV"
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
 
+      showViolation();
+    }
+  });
 
+  // Browser paste event
+  domNode?.addEventListener("paste", (e) => {
+    e.preventDefault();
 
+    showViolation();
+  });
 
-                  setPasteDetected(true);
+  // Drag & drop text/file
+  domNode?.addEventListener("drop", (e) => {
+    e.preventDefault();
 
+    showViolation();
+  });
 
-
-
-
-
-                  setPasteCount(
-                    (prev) => prev + 1
-                  );
-
-
-
-
-
-
-                  setTimeout(() => {
-
-                    setPasteDetected(false);
-
-                  }, 3000);
-                });
-              }}
-
-
-
-
-
-
-
+  // Optional: disable right-click menu
+  domNode?.addEventListener(
+    "contextmenu",
+    (e) => {
+      e.preventDefault();
+    }
+  );
+}}
 
               onChange={(value) => {
 
@@ -586,13 +520,6 @@ export default function EditorPage() {
           )}
 
         </div>
-
-
-
-
-
-
-
 
 
         {/* OUTPUT */}

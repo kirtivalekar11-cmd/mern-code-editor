@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 
 
 
+
 import authRoutes
 from "./routes/authRoutes";
 
@@ -38,15 +39,12 @@ app.use(cors());
 app.use(express.json());
 
 
-
-
-
-
 // ROUTES
 app.use(
   "/api/auth",
   authRoutes
 );
+
 
 app.use(
   "/api/projects",
@@ -113,3 +111,4 @@ app.listen(PORT, () => {
     `Server running on port ${PORT}`
   );
 });
+
